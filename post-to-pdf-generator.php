@@ -19,37 +19,74 @@ add_action('init', function () {
     }
 });
 
+// extract largest image from srcset
+function extract_largest_from_srcset($srcset) {
+    $items = explode(',', $srcset);
+    $largest = '';
+    $max_width = 0;
+
+    foreach ($items as $item) {
+        $parts = preg_split('/\s+/', trim($item));
+        if (count($parts) >= 2) {
+            $url = $parts[0];
+            $width = (int) filter_var($parts[1], FILTER_SANITIZE_NUMBER_INT);
+            if ($width > $max_width) {
+                $max_width = $width;
+                $largest = $url;
+            }
+        }
+    }
+
+    return $largest;
+}
+
+
+
 // Sanitize and fix <img> tags
 function sanitize_img_tags_for_pdf($content) {
     return preg_replace_callback('/<img[^>]*>/i', function ($matches) {
         $img = $matches[0];
 
-        // Extract data-src
-        $dataSrc = '';
-        if (preg_match('/data-src=["\']([^"\']+)["\']/', $img, $match)) {
-            $dataSrc = $match[1];
+        // Attempt to find highest-res image from srcset or data-srcset
+        $highest_src = '';
+
+        // 1. Check data-srcset
+        if (preg_match('/data-srcset=["\']([^"\']+)["\']/', $img, $set)) {
+            $highest_src = extract_largest_from_srcset($set[1]);
+        }
+        // 2. Fallback: Check regular srcset
+        elseif (preg_match('/srcset=["\']([^"\']+)["\']/', $img, $set)) {
+            $highest_src = extract_largest_from_srcset($set[1]);
+        }
+        // 3. Fallback: data-src
+        elseif (preg_match('/data-src=["\']([^"\']+)["\']/', $img, $match)) {
+            $highest_src = $match[1];
+        }
+        // 4. Fallback: src
+        elseif (preg_match('/src=["\']([^"\']+)["\']/', $img, $match)) {
+            $highest_src = $match[1];
         }
 
-        // If data-src found, force-replace or insert src
-        if (!empty($dataSrc)) {
+        // Replace existing src
+        if (!empty($highest_src)) {
             if (preg_match('/src=["\'][^"\']*["\']/', $img)) {
-                $img = preg_replace('/src=["\'][^"\']*["\']/', 'src="' . esc_url($dataSrc) . '"', $img);
+                $img = preg_replace('/src=["\'][^"\']*["\']/', 'src="' . esc_url($highest_src) . '"', $img);
             } else {
-                $img = preg_replace('/<img/', '<img src="' . esc_url($dataSrc) . '"', $img);
+                $img = preg_replace('/<img/', '<img src="' . esc_url($highest_src) . '"', $img);
             }
         }
 
-        // Remove lazyload classes
-        $img = preg_replace('/class=["\'][^"\']*lazyload[^"\']*["\']/', '', $img);
+        // Remove lazyload-related classes
+        $img = preg_replace('/class=["\'][^"\']*lazy[^"\']*["\']/', '', $img);
 
-        // Add style if not set
-        if (!preg_match('/style=["\']/', $img)) {
-            $img = str_replace('<img', '<img style="max-width: 708px; width: 100%; height: auto; object-fit: contain; display: block; margin-bottom: 0;"', $img);
-        }
+        // Optional: Remove style to control via CSS
+        $img = preg_replace('/style=["\'][^"\']*["\']/', '', $img);
 
         return $img;
     }, $content);
 }
+
+
 
 // Main PDF & HTML logic
 add_action('template_redirect', function () {
@@ -79,7 +116,15 @@ add_action('template_redirect', function () {
     // Fix image data-src and cleanup
     $post_content = sanitize_img_tags_for_pdf($post_content);
 
+    // 🧼 Remove empty <p> tags (space causing blank gap)
+    $post_content = preg_replace('/<p>(\s|&nbsp;)*<\/p>/i', '', $post_content);
+
+    // 🧹 Remove <p> wrappers around <img> to avoid vertical spacing
+    $post_content = preg_replace('/<p>\s*(<img[^>]+>)\s*<\/p>/i', '$1', $post_content);
+
+    // Final HTML
     $html .= $post_content;
+
 
     // CSS
     $css = '
@@ -101,12 +146,13 @@ add_action('template_redirect', function () {
                 line-height: 1.3;
             }
             img {
-                max-width: 708px;
-                width: 100%;
-                height: auto;
-                margin-bottom: 0px;
-                object-fit: contain;
-                display: block;
+		max-width: 708px;
+		width: 100%;
+		height: auto;
+		margin-bottom: 0px;
+		object-fit: contain;
+		display: block;
+		page-break-inside: avoid;
             }
             p {
                 margin-bottom: 5px;
