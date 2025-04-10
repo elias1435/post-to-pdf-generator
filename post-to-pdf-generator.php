@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Post to PDF Generator
  * Description: Adds a "Download PDF" button to posts and generates PDFs using Dompdf.
- * Version: 1.5
+ * Version: 1.0
  * Author: Muhammad Elias
  * Author URI: https://buildwithelias.tech
  */
@@ -186,7 +186,7 @@ add_action('template_redirect', function () {
         $dompdf->loadHtml($css . $html);
         $dompdf->setPaper('A4', 'portrait');
         $dompdf->render();
-        $dompdf->stream(sanitize_title(get_the_title()) . '.pdf', ['Attachment' => true]);
+        $dompdf->stream(sanitize_title(get_the_title()) . '.pdf', ['Attachment' => true]); // true to start download
         exit;
     }
 });
@@ -210,8 +210,8 @@ add_filter('the_content', function ($content) {
 
         $buttons = '<div class="download-pdf-wrap" style="margin-top: 30px;">';
 		
-		$buttons .= '<a id="download-pdf-btn" href="' . esc_url($download_link) . '" style="' . $style . '">📄 Download PDF</a>';
-		$buttons .= '<a id="preview-html-btn" href="' . esc_url($preview_link) . '" style="' . $style . '">🔍 Preview PDF HTML</a>';
+		$buttons .= '<a id="download-pdf-btn" href="' . esc_url($download_link) . '" target="_blank" style="' . $style . '">📄 Download PDF</a>';
+		$buttons .= '<a id="preview-html-btn" href="' . esc_url($preview_link) . '" target="_blank" style="' . $style . '">🔍 Preview PDF HTML</a>';
 		
         $buttons .= '</div>';
 
